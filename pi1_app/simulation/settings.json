@@ -1,0 +1,118 @@
+{
+  "global": {
+    "pi_id": "PI1",
+    "mqtt": {
+      "enabled": true,
+      "broker": "127.0.0.1",
+      "port": 1883,
+      "batch_interval_sec": 5
+    }
+  },
+  "devices": {
+    "DS1": {
+      "enabled": true,
+      "simulated": true,
+      "pin": 5,
+      "pull": "UP",
+      "poll_s": 0.1,
+      "device_name": "Door Sensor (Button)",
+      "topic": "home/pi1/door/button",
+      "use_events": true,
+      "debounce_ms": 150,
+      "invert": null
+    },
+    "DPIR1": {
+      "enabled": true,
+      "simulated": true,
+      "pin": 19,
+      "poll_s": 0.2,
+      "device_name": "Door Motion Sensor (PIR)",
+      "topic": "home/pi1/door/motion",
+      "use_events": true,
+      "pull": null
+    },
+    "DUS1": {
+      "enabled": true,
+      "simulated": true,
+      "trigger_pin": 23,
+      "echo_pin": 24,
+      "poll_s": 1.0,
+      "device_name": "Door Ultrasonic Sensor",
+      "topic": "home/pi1/door/distance"
+    },
+    "DMS": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 1.5,
+      "keys": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "*",
+        "0",
+        "#"
+      ],
+      "device_name": "Door Membrane Switch",
+      "topic": "home/pi1/door/keypad",
+      "row_pins": [
+        25,
+        8,
+        7,
+        1
+      ],
+      "col_pins": [
+        12,
+        16,
+        20,
+        21
+      ],
+      "keymap": [
+        [
+          "1",
+          "2",
+          "3",
+          "A"
+        ],
+        [
+          "4",
+          "5",
+          "6",
+          "B"
+        ],
+        [
+          "7",
+          "8",
+          "9",
+          "C"
+        ],
+        [
+          "*",
+          "0",
+          "#",
+          "D"
+        ]
+      ],
+      "debounce_ms": 200
+    },
+    "DL": {
+      "enabled": true,
+      "simulated": true,
+      "pin": 6,
+      "device_name": "Door Light (LED)",
+      "topic": "home/pi1/door/led"
+    },
+    "DB": {
+      "enabled": true,
+      "simulated": true,
+      "pin": 13,
+      "device_name": "Door Buzzer",
+      "topic": "home/pi1/door/buzzer"
+    }
+  }
+}

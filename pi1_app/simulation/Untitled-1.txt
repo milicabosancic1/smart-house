@@ -1,0 +1,1 @@
+http://proxy.uns.ac.rs:8080

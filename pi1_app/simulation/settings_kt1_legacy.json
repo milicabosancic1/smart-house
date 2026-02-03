@@ -1,0 +1,51 @@
+{
+  "DS1": {
+    "enabled": true,
+    "simulated": true,
+    "pin": 5,
+    "pull": "UP",
+    "poll_s": 0.1
+  },
+  "DPIR1": {
+    "enabled": true,
+    "simulated": true,
+    "pin": 19,
+    "poll_s": 0.2
+  },
+  "DUS1": {
+    "enabled": true,
+    "simulated": true,
+    "trigger_pin": 23,
+    "echo_pin": 24,
+    "poll_s": 1.0
+  },
+  "DMS": {
+    "enabled": true,
+    "simulated": true,
+    "poll_s": 1.5,
+    "keys": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "*",
+      "0",
+      "#"
+    ]
+  },
+  "DL": {
+    "enabled": true,
+    "simulated": true,
+    "pin": 6
+  },
+  "DB": {
+    "enabled": true,
+    "simulated": true,
+    "pin": 13
+  }
+}

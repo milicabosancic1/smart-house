@@ -1,0 +1,108 @@
+{
+  "uid": "smarthome-kt2",
+  "title": "Smart Home - KT2",
+  "tags": ["iot", "kt2"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "DS1 - Door Button",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_ds1\" and r._field == \"value\")"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "DPIR1 - Motion",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_dpir1\" and r._field == \"value\")"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "DUS1 - Ultrasonic Distance (cm)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_dus1\" and r._field == \"value\")"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "DMS - Membrane Switch",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_dms\" and r._field == \"value\")"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "DL - Door Light",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_dl\" and r._field == \"value\")"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "DB - Door Buzzer",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_db\" and r._field == \"value\")"
+        }
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    }
+  ]
+}
