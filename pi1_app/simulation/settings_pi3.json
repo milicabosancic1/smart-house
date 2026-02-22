@@ -1,0 +1,71 @@
+{
+  "global": {
+    "pi_id": "PI3",
+    "mqtt": {
+      "enabled": true,
+      "broker": "127.0.0.1",
+      "port": 1883,
+      "batch_interval_sec": 5
+    }
+  },
+  "devices": {
+    "DPIR3": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 0.25,
+      "device_name": "Living Room Motion Sensor",
+      "topic": "home/pi3/living/motion"
+    },
+    "DHT1": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 2.5,
+      "device_name": "Bedroom DHT",
+      "topic": "home/pi3/bedroom/dht",
+      "temp_min": 18.0,
+      "temp_max": 27.0,
+      "hum_min": 30.0,
+      "hum_max": 65.0
+    },
+    "DHT2": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 2.5,
+      "device_name": "Master Bedroom DHT",
+      "topic": "home/pi3/master-bedroom/dht",
+      "temp_min": 19.0,
+      "temp_max": 28.0,
+      "hum_min": 30.0,
+      "hum_max": 65.0
+    },
+    "IR": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 4.0,
+      "device_name": "Bedroom Infrared",
+      "topic": "home/pi3/bedroom/ir",
+      "commands": [
+        "toggle",
+        "color",
+        "off",
+        "on"
+      ],
+      "colors": [
+        "#ff4444",
+        "#44ff44",
+        "#4488ff",
+        "#ffffff"
+      ]
+    },
+    "BRGB": {
+      "enabled": true,
+      "simulated": true,
+      "device_name": "Bedroom RGB"
+    },
+    "LCD": {
+      "enabled": true,
+      "simulated": true,
+      "device_name": "Living Room Display"
+    }
+  }
+}

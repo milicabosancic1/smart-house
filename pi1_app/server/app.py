@@ -1,9 +1,11 @@
 import os
 import json
 import threading
+import time
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import paho.mqtt.client as mqtt
+from system_state import SystemState
 
 # Optional InfluxDB v2
 INFLUX_URL = os.getenv("INFLUX_URL", "http://localhost:8086")
@@ -14,8 +16,11 @@ INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "smart_home")
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "home/#")
+WEBC_URL = os.getenv("WEBC_URL", "")
 
-app = Flask(__name__)
+# Ensure templates folder is found
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
+system_state = SystemState()
 
 _influx_write = None
 try:
@@ -51,6 +56,19 @@ def write_to_influx(topic: str, payload: dict):
     # Influx requires numeric/bool/string fields; we store as string if complex
     if isinstance(val, (int, float, bool, str)):
         p = p.field("value", val)
+    elif isinstance(val, dict):
+        # DHT-friendly flattening for Grafana panels
+        if "temperature_c" in val:
+            try:
+                p = p.field("temperature_c", float(val.get("temperature_c")))
+            except Exception:
+                pass
+        if "humidity_pct" in val:
+            try:
+                p = p.field("humidity_pct", float(val.get("humidity_pct")))
+            except Exception:
+                pass
+        p = p.field("value_str", json.dumps(val))
     else:
         p = p.field("value_str", json.dumps(val))
 
@@ -63,11 +81,127 @@ def write_to_influx(topic: str, payload: dict):
     _influx_write.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=p)
 
 
+def write_alarm_event_to_influx(event: dict):
+    if _influx_write is None:
+        return
+
+    ts = float(event.get("ts", time.time()))
+    state = str(event.get("event", ""))
+    reason = str(event.get("reason", ""))
+
+    p = Point("alarm_event")
+    p = p.tag("source", "system")
+    p = p.tag("event", state)
+    p = p.tag("reason", reason)
+    p = p.field("active", 1 if state == "on" else 0)
+    p = p.field("reason_text", reason)
+    p = p.time(datetime.utcfromtimestamp(ts), WritePrecision.S)
+
+    _influx_write.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=p)
+
+
 def _publish_cmd(topic: str, data: dict):
     pub = mqtt.Client()
     pub.connect(MQTT_BROKER, MQTT_PORT, 60)
     pub.publish(topic, json.dumps(data))
     pub.disconnect()
+
+
+def _publish_alarm_buzzer(active: bool):
+    _publish_cmd("home/pi1/cmd/buzzer", {"state": bool(active)})
+
+
+def _trigger_dl_10s():
+    _publish_cmd("home/pi1/cmd/led", {"state": True})
+
+    def _off_later():
+        time.sleep(10.0)
+        _publish_cmd("home/pi1/cmd/led", {"state": False})
+
+    threading.Thread(target=_off_later, daemon=True).start()
+
+
+def _sync_4sd(timer_seconds: int, blink: bool):
+    mm = timer_seconds // 60
+    ss = timer_seconds % 60
+    _publish_cmd(
+        "home/pi2/cmd/4sd",
+        {"display": f"{mm:02d}:{ss:02d}", "blink": bool(blink)},
+    )
+
+
+def _sync_lcd(text: str):
+    _publish_cmd("home/pi3/cmd/lcd", {"text": text})
+
+
+def _sync_brgb(state: bool, color: str):
+    _publish_cmd("home/pi3/cmd/brgb", {"state": bool(state), "color": color})
+
+def _handle_system_state(reading: dict):
+    sensor = reading.get("code")
+    value = reading.get("value")
+
+    if sensor in {"DS1", "DS2"}:
+        system_state.handle_door_sensor(sensor, value)
+    elif sensor == "DMS":
+        system_state.check_pin(value)
+    elif sensor in {"DUS1", "DUS2"}:
+        system_state.update_distance(sensor, value)
+    elif sensor in {"DPIR1", "DPIR2", "DPIR3"}:
+        out = system_state.handle_motion(sensor, value)
+        if out.get("trigger_dl"):
+            _trigger_dl_10s()
+    elif sensor == "GSG":
+        system_state.handle_gsg(value)
+    elif sensor in {"DHT1", "DHT2", "DHT3"}:
+        system_state.update_dht(sensor, value)
+    elif sensor == "BTN":
+        system_state.handle_btn(value)
+    elif sensor == "IR":
+        system_state.apply_ir(value)
+
+
+def _system_rules_thread():
+    last_alarm = None
+    last_timer = None
+    last_brgb = None
+    last_lcd_rotate_ts = 0.0
+
+    while True:
+        try:
+            system_state.check_time_rules()
+            for event in system_state.pop_alarm_events():
+                write_alarm_event_to_influx(event)
+
+            snap = system_state.snapshot()
+
+            alarm_active = bool(snap.get("alarm_active"))
+            if alarm_active != last_alarm:
+                _publish_alarm_buzzer(alarm_active)
+                last_alarm = alarm_active
+
+            timer_key = (
+                int(snap.get("timer_seconds", 0)),
+                bool(snap.get("timer_blink", False)),
+                bool(snap.get("timer_running", False)),
+            )
+            if timer_key != last_timer:
+                _sync_4sd(timer_key[0], timer_key[1])
+                last_timer = timer_key
+
+            brgb_key = (bool(snap.get("brgb_state", False)), str(snap.get("brgb_color", "#ffffff")))
+            if brgb_key != last_brgb:
+                _sync_brgb(brgb_key[0], brgb_key[1])
+                last_brgb = brgb_key
+
+            now = time.time()
+            if now - last_lcd_rotate_ts >= 4.0:
+                text = system_state.next_lcd_text()
+                _sync_lcd(text)
+                last_lcd_rotate_ts = now
+        except Exception as e:
+            print(f"[STATE] rules error: {e}")
+        time.sleep(0.25)
 
 def on_message(client, userdata, msg):
     try:
@@ -80,8 +214,10 @@ def on_message(client, userdata, msg):
         if isinstance(payload, list):
             for item in payload:
                 if isinstance(item, dict):
+                    _handle_system_state(item)
                     write_to_influx(msg.topic, item)
         elif isinstance(payload, dict):
+            _handle_system_state(payload)
             write_to_influx(msg.topic, payload)
     except Exception as e:
         print(f"[INFLUX] write error: {e}")
@@ -97,6 +233,10 @@ def mqtt_thread():
 t = threading.Thread(target=mqtt_thread, daemon=True)
 t.start()
 
+# Start system rules checker in background
+t_rules = threading.Thread(target=_system_rules_thread, daemon=True)
+t_rules.start()
+
 @app.get("/health")
 def health():
     return jsonify({
@@ -104,6 +244,97 @@ def health():
         "mqtt": {"broker": MQTT_BROKER, "port": MQTT_PORT, "topic": MQTT_TOPIC},
         "influx": {"enabled": _influx_write is not None, "url": INFLUX_URL, "bucket": INFLUX_BUCKET, "org": INFLUX_ORG}
     })
+
+
+@app.get("/state")
+def get_state():
+    return jsonify(system_state.snapshot())
+
+
+@app.get("/")
+def web_index():
+    return render_template("index.html")
+
+
+@app.post("/api/system/arm")
+def api_system_arm():
+    system_state.arm_system()
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/system/disarm")
+def api_system_disarm():
+    system_state.disarm_system()
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/alarm/on")
+def api_alarm_on():
+    system_state.activate_alarm("web")
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/alarm/off")
+def api_alarm_off():
+    system_state.deactivate_alarm()
+    system_state.disarm_system()
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/timer/set")
+def api_timer_set():
+    data = request.get_json(force=True, silent=True) or {}
+    seconds = int(data.get("seconds", 0))
+    system_state.set_timer(seconds)
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/timer/add")
+def api_timer_add():
+    data = request.get_json(force=True, silent=True) or {}
+    seconds = int(data.get("seconds", 0))
+    system_state.add_timer_seconds(seconds)
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/timer/step")
+def api_timer_step():
+    data = request.get_json(force=True, silent=True) or {}
+    seconds = int(data.get("seconds", 30))
+    system_state.set_timer_add_step(seconds)
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/timer/start")
+def api_timer_start():
+    system_state.start_timer()
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/timer/stop")
+def api_timer_stop():
+    system_state.stop_timer()
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/timer/ack")
+def api_timer_ack():
+    system_state.ack_timer_blink()
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/brgb")
+def api_brgb():
+    data = request.get_json(force=True, silent=True) or {}
+    state = data.get("state")
+    color = data.get("color")
+    system_state.set_brgb(state=state, color=color)
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.get("/api/camera")
+def api_camera():
+    return jsonify({"ok": True, "url": WEBC_URL})
 
 @app.post("/actuator/<pi_id>/<name>")
 def actuator(pi_id: str, name: str):

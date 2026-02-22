@@ -1,0 +1,63 @@
+{
+  "global": {
+    "pi_id": "PI2",
+    "mqtt": {
+      "enabled": true,
+      "broker": "127.0.0.1",
+      "port": 1883,
+      "batch_interval_sec": 5
+    }
+  },
+  "devices": {
+    "DS2": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 0.15,
+      "device_name": "Door Sensor 2 (Button)",
+      "topic": "home/pi2/door/button"
+    },
+    "DPIR2": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 0.25,
+      "device_name": "Door Motion Sensor 2 (PIR)",
+      "topic": "home/pi2/door/motion"
+    },
+    "DUS2": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 1.0,
+      "device_name": "Door Ultrasonic Sensor 2",
+      "topic": "home/pi2/door/distance"
+    },
+    "BTN": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 0.3,
+      "device_name": "Kitchen Button",
+      "topic": "home/pi2/kitchen/button"
+    },
+    "DHT3": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 2.5,
+      "device_name": "Kitchen DHT",
+      "topic": "home/pi2/kitchen/dht",
+      "temp_min": 20.0,
+      "temp_max": 30.0,
+      "hum_min": 35.0,
+      "hum_max": 70.0
+    },
+    "GSG": {
+      "enabled": true,
+      "simulated": true,
+      "poll_s": 0.7,
+      "device_name": "Gyroscope",
+      "topic": "home/pi2/kitchen/gyroscope",
+      "base_jitter_deg": 2.5,
+      "spike_chance": 0.08,
+      "spike_min_deg": 20.0,
+      "spike_max_deg": 55.0
+    }
+  }
+}

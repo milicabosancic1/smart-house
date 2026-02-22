@@ -6,6 +6,12 @@
       "broker": "127.0.0.1",
       "port": 1883,
       "batch_interval_sec": 5
+    },
+    "webcam": {
+      "enabled": false,
+      "auto_start": false,
+      "streamer_cmd": "mjpg_streamer -i \"input_uvc.so\" -o \"output_http.so -p 8080 -w /usr/local/share/mjpg-streamer/www\"",
+      "stream_url": "http://<raspberry_pi_ip>:8080/?action=stream"
     }
   },
   "devices": {

@@ -4,6 +4,8 @@ Ovaj paket sadrži:
 - **KT1**: PI1 skripta (senzori + simulacija + ispis + konzolna kontrola aktuatora)
 - **KT2**: MQTT batch slanje + Flask server (MQTT -> InfluxDB) + Grafana (paneli) + MQTT komande za aktuatore
 
+Za odbranu (15 min runbook): `docs/DEFENSE_15MIN.md`
+
 ## 1) Infrastruktura (MQTT + InfluxDB + Grafana)
 
 U folderu `pi1_app/`:
@@ -35,6 +37,11 @@ python app.py
 
 Health: `GET http://localhost:5000/health`
 
+Minimal web app (status + control):
+- `http://localhost:5000/`
+- koristi API rute: `/state`, `/api/system/*`, `/api/alarm/*`, `/api/timer/*`, `/api/brgb`, `/api/camera`
+- za prikaz kamere postavi `WEBC_URL` (npr. mjpeg/http stream) pre pokretanja servera
+
 ## 3) PI1 aplikacija
 
 ```bash
@@ -48,3 +55,36 @@ python main.py
 - Buzzer: `POST http://localhost:5000/actuator/pi1/buzzer  {"action":"beep","ms":150,"count":2}`
 
 PI1 sluša MQTT komande na: `home/pi1/cmd/#`
+
+### PI1 kamera (WEBC) preko USB + mjpg_streamer
+
+Na Raspberry Pi možeš ručno pokrenuti stream:
+
+```bash
+mjpg_streamer -i "input_uvc.so" -o "output_http.so -p 8080 -w /usr/local/share/mjpg-streamer/www"
+```
+
+Stream URL:
+- `http://<raspberry_pi_ip>:8080/?action=stream`
+
+Ovaj URL može direktno da ide u `img src` (web aplikacija ga prikazuje preko `WEBC_URL`).
+
+Ako želiš da Python skripta sama startuje `mjpg_streamer`, podesi `global.webcam.enabled=true` i `global.webcam.auto_start=true` u `simulation/settings.json`.
+
+## 4) Simulacija PI2 i PI3 (odbrana)
+
+U folderu `pi1_app/simulation` pokreni zaseban proces po PI profilu:
+
+```bash
+# PI1 (postojeći profil)
+python main.py
+
+# PI2 profil
+$env:SIM_SETTINGS_FILE="settings_pi2.json"; python main.py
+
+# PI3 profil
+$env:SIM_SETTINGS_FILE="settings_pi3.json"; python main.py
+```
+
+PI2 profil šalje: `DS2`, `DPIR2`, `DUS2`, `DHT3`, `GSG`.
+PI3 profil šalje: `DPIR3`, `DHT1`, `DHT2`.

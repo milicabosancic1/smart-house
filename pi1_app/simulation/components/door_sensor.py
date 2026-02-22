@@ -24,7 +24,7 @@ def run_ds1(settings: dict, threads: list, stop_event: threading.Event, state: S
     if not settings.get("enabled", True):
         return
 
-    code = "DS1"
+    code = settings.get("code", "DS1")
     poll_s = float(settings.get("poll_s", 0.1))
     simulated = bool(settings.get("simulated", False))
     device_name = settings.get("device_name", "Door Sensor")

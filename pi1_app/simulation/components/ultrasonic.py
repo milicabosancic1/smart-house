@@ -21,7 +21,7 @@ def run_dus1(settings: dict, threads: list, stop_event: threading.Event, state: 
              pi_id: str = "PI1", batch_sender=None):
     if not settings.get("enabled", True):
         return
-    code = "DUS1"
+    code = settings.get("code", "DUS1")
     poll_s = float(settings.get("poll_s", 1.0))
     simulated = bool(settings.get("simulated", False))
     device_name = settings.get("device_name", "Door Ultrasonic Sensor")

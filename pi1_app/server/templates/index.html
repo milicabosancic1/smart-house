@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart House Control</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f7f7f8; color: #111; }
+    h1 { margin: 0 0 16px 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .card { background: white; border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    button { padding: 8px 10px; border: 1px solid #bbb; background: #fff; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #f2f2f2; }
+    input { padding: 8px; border: 1px solid #bbb; border-radius: 8px; width: 100px; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #f3f4f5; padding: 10px; border-radius: 8px; }
+    .ok { color: #0a7d30; }
+    .alarm { color: #b00020; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Smart House - Minimal Web</h1>
+  <div class="grid">
+    <section class="card">
+      <h3>System / Alarm</h3>
+      <div id="status">Loading...</div>
+      <div class="row">
+        <button onclick="post('/api/system/arm')">Arm (10s)</button>
+        <button onclick="post('/api/system/disarm')">Disarm</button>
+      </div>
+      <div class="row">
+        <button onclick="post('/api/alarm/on')">Alarm ON</button>
+        <button onclick="post('/api/alarm/off')">Alarm OFF</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Kitchen Timer</h3>
+      <div class="row">
+        <input id="timerSec" type="number" min="0" value="120" />
+        <button onclick="setTimer()">Set</button>
+        <button onclick="addTimer(30)">+30s</button>
+      </div>
+      <div class="row">
+        <input id="timerStep" type="number" min="1" value="30" />
+        <button onclick="setTimerStep()">Set BTN step (N)</button>
+      </div>
+      <div class="row">
+        <button onclick="post('/api/timer/start')">Start</button>
+        <button onclick="post('/api/timer/stop')">Stop</button>
+        <button onclick="post('/api/timer/ack')">Ack Blink</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>BRGB / IR</h3>
+      <div class="row">
+        <button onclick="setBrgb(true)">ON</button>
+        <button onclick="setBrgb(false)">OFF</button>
+        <input id="brgbColor" type="text" value="#00ff88" />
+        <button onclick="setBrgb(null)">Set Color</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Grafana / Camera</h3>
+      <div class="row">
+        <a href="http://localhost:3000" target="_blank">Open Grafana</a>
+      </div>
+      <div id="cameraStatus">Camera: loading...</div>
+      <img id="cameraImg" alt="camera" style="max-width:100%; border-radius:8px; margin-top:8px; display:none;" />
+    </section>
+
+    <section class="card">
+      <h3>Raw State</h3>
+      <pre id="raw">{}</pre>
+    </section>
+  </div>
+
+  <script>
+    async function post(url, body) {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : '{}'
+      });
+      await refresh();
+    }
+
+    async function setTimer() {
+      const seconds = Number(document.getElementById('timerSec').value || 0);
+      await post('/api/timer/set', { seconds });
+    }
+
+    async function setTimerStep() {
+      const seconds = Number(document.getElementById('timerStep').value || 30);
+      await post('/api/timer/step', { seconds });
+    }
+
+    async function addTimer(n) {
+      await post('/api/timer/add', { seconds: n });
+    }
+
+    async function setBrgb(state) {
+      const color = (document.getElementById('brgbColor').value || '').trim();
+      const body = { color };
+      if (state !== null) body.state = state;
+      await post('/api/brgb', body);
+    }
+
+    async function refreshCamera() {
+      const res = await fetch('/api/camera');
+      const data = await res.json();
+      const el = document.getElementById('cameraStatus');
+      if (data.url) {
+        el.innerHTML = `Camera URL: <a href="${data.url}" target="_blank">${data.url}</a>`;
+        const img = document.getElementById('cameraImg');
+        img.src = data.url;
+        img.style.display = 'block';
+      } else {
+        el.textContent = 'Camera URL nije podešen (set WEBC_URL env).';
+        const img = document.getElementById('cameraImg');
+        img.style.display = 'none';
+      }
+    }
+
+    function fmt(sec) {
+      const s = Math.max(0, Number(sec || 0));
+      const mm = Math.floor(s / 60).toString().padStart(2, '0');
+      const ss = (s % 60).toString().padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    async function refresh() {
+      const res = await fetch('/state');
+      const data = await res.json();
+
+      const status = document.getElementById('status');
+      const alarmText = data.alarm_active ? 'ALARM ACTIVE' : 'Alarm idle';
+      const alarmClass = data.alarm_active ? 'alarm' : 'ok';
+
+      status.innerHTML = `
+        <div><strong class="${alarmClass}">${alarmText}</strong></div>
+        <div>System armed: <strong>${data.system_armed}</strong> | Pending arm: <strong>${data.pending_arm}</strong></div>
+        <div>Persons: <strong>${data.person_count}</strong></div>
+        <div>Timer: <strong>${fmt(data.timer_seconds)}</strong> | Running: <strong>${data.timer_running}</strong> | Blink: <strong>${data.timer_blink}</strong> | BTN step: <strong>${data.timer_add_step}</strong></div>
+        <div>BRGB: <strong>${data.brgb_state}</strong> / <strong>${data.brgb_color}</strong></div>
+        <div>LCD: <strong>${data.lcd_text || '-'}</strong></div>
+        <div>Reasons: <strong>${(data.alarm_reasons || []).join(', ') || '-'}</strong></div>
+      `;
+
+      document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+    }
+
+    refresh();
+    refreshCamera();
+    setInterval(refresh, 1000);
+    setInterval(refreshCamera, 5000);
+  </script>
+</body>
+</html>
