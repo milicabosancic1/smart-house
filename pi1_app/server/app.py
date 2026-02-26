@@ -54,8 +54,21 @@ def write_to_influx(topic: str, payload: dict):
     # fields
     val = payload.get("value")
     # Influx requires numeric/bool/string fields; we store as string if complex
-    if isinstance(val, (int, float, bool, str)):
+    if isinstance(val, (int, float, bool)):
         p = p.field("value", val)
+    elif isinstance(val, str):
+        if str(code).upper() == "DMS":
+            key_map = {
+                "0": 0, "1": 1, "2": 2, "3": 3, "4": 4,
+                "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+                "*": 10, "#": 11, "A": 12, "B": 13, "C": 14, "D": 15,
+            }
+            mapped = key_map.get(val.upper())
+            if mapped is not None:
+                p = p.field("value_num", mapped)
+            p = p.field("value_str", val)
+        else:
+            p = p.field("value", val)
     elif isinstance(val, dict):
         # DHT-friendly flattening for Grafana panels
         if "temperature_c" in val:

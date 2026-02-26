@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     try:
         # Console runs in main thread (clean Ctrl+C handling)
-        run_console(led, buzzer, state)
+        run_console(led, buzzer, state, pi_id=pi_id)
     finally:
         # stop loops
         stop_event.set()

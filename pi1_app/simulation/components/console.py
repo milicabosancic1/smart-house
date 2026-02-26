@@ -9,8 +9,8 @@ HELP = """Komande:
   exit
 """
 
-def run_console(led: Any, buzzer: Any, state: SharedState):
-    print("\n--- PI1 Console Control ---")
+def run_console(led: Any, buzzer: Any, state: SharedState, pi_id: str = "PI1"):
+    print(f"\n--- {pi_id} Console Control ---")
     print(HELP)
     pending = None  # holds a command word awaiting args
     while True:
