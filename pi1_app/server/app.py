@@ -81,6 +81,33 @@ def write_to_influx(topic: str, payload: dict):
                 p = p.field("humidity_pct", float(val.get("humidity_pct")))
             except Exception:
                 pass
+        if "display" in val:
+            p = p.field("display", str(val.get("display")))
+        if "text" in val:
+            p = p.field("text", str(val.get("text")))
+        if "color" in val:
+            p = p.field("color", str(val.get("color")))
+        if "action" in val:
+            p = p.field("action", str(val.get("action")))
+        if "blink" in val:
+            p = p.field("blink", bool(val.get("blink")))
+        if "state" in val:
+            p = p.field("state", bool(val.get("state")))
+        if "ms" in val:
+            try:
+                p = p.field("ms", int(val.get("ms")))
+            except Exception:
+                pass
+        if "count" in val:
+            try:
+                p = p.field("count", int(val.get("count")))
+            except Exception:
+                pass
+        if "gap_ms" in val:
+            try:
+                p = p.field("gap_ms", int(val.get("gap_ms")))
+            except Exception:
+                pass
         p = p.field("value_str", json.dumps(val))
     else:
         p = p.field("value_str", json.dumps(val))
@@ -120,16 +147,39 @@ def _publish_cmd(topic: str, data: dict):
     pub.disconnect()
 
 
+def _record_actuator_state(pi: str, code: str, device_name: str, value, topic: str):
+    try:
+        write_to_influx(
+            topic,
+            {
+                "pi": pi,
+                "code": code,
+                "device_name": device_name,
+                "value": value,
+                "simulated": False,
+                "ts": time.time(),
+            },
+        )
+    except Exception as e:
+        print(f"[INFLUX] actuator write error: {e}")
+
+
 def _publish_alarm_buzzer(active: bool):
-    _publish_cmd("home/pi1/cmd/buzzer", {"state": bool(active)})
+    topic = "home/pi1/cmd/buzzer"
+    state = bool(active)
+    _publish_cmd(topic, {"state": state})
+    _record_actuator_state("PI1", "DB", "Door Buzzer", state, topic)
 
 
 def _trigger_dl_10s():
-    _publish_cmd("home/pi1/cmd/led", {"state": True})
+    topic = "home/pi1/cmd/led"
+    _publish_cmd(topic, {"state": True})
+    _record_actuator_state("PI1", "DL", "Door Light", True, topic)
 
     def _off_later():
         time.sleep(10.0)
-        _publish_cmd("home/pi1/cmd/led", {"state": False})
+        _publish_cmd(topic, {"state": False})
+        _record_actuator_state("PI1", "DL", "Door Light", False, topic)
 
     threading.Thread(target=_off_later, daemon=True).start()
 
@@ -137,18 +187,27 @@ def _trigger_dl_10s():
 def _sync_4sd(timer_seconds: int, blink: bool):
     mm = timer_seconds // 60
     ss = timer_seconds % 60
+    topic = "home/pi2/cmd/4sd"
+    value = {"display": f"{mm:02d}:{ss:02d}", "blink": bool(blink)}
     _publish_cmd(
-        "home/pi2/cmd/4sd",
-        {"display": f"{mm:02d}:{ss:02d}", "blink": bool(blink)},
+        topic,
+        value,
     )
+    _record_actuator_state("PI2", "4SD", "Kitchen 4 Digit 7 Segment Display Timer", value, topic)
 
 
 def _sync_lcd(text: str):
-    _publish_cmd("home/pi3/cmd/lcd", {"text": text})
+    topic = "home/pi3/cmd/lcd"
+    value = {"text": text}
+    _publish_cmd(topic, value)
+    _record_actuator_state("PI3", "LCD", "Living room Display", value, topic)
 
 
 def _sync_brgb(state: bool, color: str):
-    _publish_cmd("home/pi3/cmd/brgb", {"state": bool(state), "color": color})
+    topic = "home/pi3/cmd/brgb"
+    value = {"state": bool(state), "color": color}
+    _publish_cmd(topic, value)
+    _record_actuator_state("PI3", "BRGB", "Bedroom RGB", value, topic)
 
 def _handle_system_state(reading: dict):
     sensor = reading.get("code")
@@ -360,6 +419,7 @@ def actuator(pi_id: str, name: str):
     data = request.get_json(force=True, silent=True) or {}
     topic = f"home/{pi_id.lower()}/cmd/{name.lower()}"
     _publish_cmd(topic, data)
+    _record_actuator_state(pi_id.upper(), name.upper(), f"{name.upper()} actuator", data, topic)
     return jsonify({"published_to": topic, "payload": data})
 
 
@@ -369,21 +429,27 @@ def actuator(pi_id: str, name: str):
 @app.get("/actuator/<pi_id>/led/on")
 def led_on(pi_id: str):
     topic = f"home/{pi_id.lower()}/cmd/led"
-    _publish_cmd(topic, {"state": True})
+    value = {"state": True}
+    _publish_cmd(topic, value)
+    _record_actuator_state(pi_id.upper(), "DL", "Door Light", True, topic)
     return jsonify({"ok": True, "published_to": topic, "state": True})
 
 
 @app.get("/actuator/<pi_id>/led/off")
 def led_off(pi_id: str):
     topic = f"home/{pi_id.lower()}/cmd/led"
-    _publish_cmd(topic, {"state": False})
+    value = {"state": False}
+    _publish_cmd(topic, value)
+    _record_actuator_state(pi_id.upper(), "DL", "Door Light", False, topic)
     return jsonify({"ok": True, "published_to": topic, "state": False})
 
 
 @app.get("/actuator/<pi_id>/led/toggle")
 def led_toggle(pi_id: str):
     topic = f"home/{pi_id.lower()}/cmd/led"
-    _publish_cmd(topic, {"action": "toggle"})
+    value = {"action": "toggle"}
+    _publish_cmd(topic, value)
+    _record_actuator_state(pi_id.upper(), "DL", "Door Light", value, topic)
     return jsonify({"ok": True, "published_to": topic, "action": "toggle"})
 
 
@@ -393,7 +459,9 @@ def buzzer_beep(pi_id: str):
     count = int(request.args.get("count", "1"))
     gap_ms = int(request.args.get("gap_ms", "120"))
     topic = f"home/{pi_id.lower()}/cmd/buzzer"
-    _publish_cmd(topic, {"action": "beep", "ms": ms, "count": count, "gap_ms": gap_ms})
+    value = {"action": "beep", "ms": ms, "count": count, "gap_ms": gap_ms}
+    _publish_cmd(topic, value)
+    _record_actuator_state(pi_id.upper(), "DB", "Door Buzzer", value, topic)
     return jsonify({"ok": True, "published_to": topic, "action": "beep", "ms": ms, "count": count, "gap_ms": gap_ms})
 
 if __name__ == "__main__":

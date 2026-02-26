@@ -197,6 +197,42 @@
       "targets": [
         {"refId": "A", "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_ir\" and r._field == \"value_str\")\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 20)"}
       ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "4SD - Blink state",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 64},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {"refId": "A", "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_4sd\" and r._field == \"blink\")"}
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "BRGB - State",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 64},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {"refId": "A", "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_brgb\" and r._field == \"state\")"}
+      ],
+      "options": {
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "LCD - Latest text",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 64},
+      "datasource": {"type": "influxdb", "uid": "P951FEA4DE68E13C5"},
+      "targets": [
+        {"refId": "A", "query": "from(bucket: \"smart_home\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_lcd\" and r._field == \"text\")\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 20)"}
+      ]
     }
   ]
 }
