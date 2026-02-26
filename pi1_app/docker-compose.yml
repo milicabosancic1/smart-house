@@ -28,6 +28,9 @@ services:
     environment:
       # For actuator control you can use Button Panel plugin
       - GF_INSTALL_PLUGINS=speakyourcode-button-panel,yesoreyeram-infinity-datasource
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana_data:/var/lib/grafana
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -47,6 +50,7 @@ services:
       - INFLUX_TOKEN=super-secret-token-change
       - INFLUX_ORG=iot
       - INFLUX_BUCKET=smart_home
+      - WEBC_URL=${WEBC_URL:-}
     depends_on:
       - mosquitto
       - influxdb

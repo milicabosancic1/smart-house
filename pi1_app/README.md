@@ -71,6 +71,26 @@ Ovaj URL može direktno da ide u `img src` (web aplikacija ga prikazuje preko `W
 
 Ako želiš da Python skripta sama startuje `mjpg_streamer`, podesi `global.webcam.enabled=true` i `global.webcam.auto_start=true` u `simulation/settings.json`.
 
+### Laptop fallback (bez Raspberry Pi)
+
+Ako nemaš Raspberry Pi, možeš koristiti laptop kameru kao lokalni MJPEG stream:
+
+```bash
+cd pi1_app
+py -m pip install -r webcam_requirements.txt
+py tools/webcam_stream.py
+```
+
+Zatim postavi:
+
+```bash
+$env:WEBC_URL="http://localhost:8080/?action=stream"
+docker compose up -d --build server
+```
+
+Test URL u browseru:
+- `http://localhost:8080/?action=stream`
+
 ## 4) Simulacija PI2 i PI3 (odbrana)
 
 U folderu `pi1_app/simulation` pokreni zaseban proces po PI profilu:

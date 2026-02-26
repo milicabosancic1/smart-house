@@ -16,6 +16,8 @@
     pre { white-space: pre-wrap; word-break: break-word; background: #f3f4f5; padding: 10px; border-radius: 8px; }
     .ok { color: #0a7d30; }
     .alarm { color: #b00020; font-weight: bold; }
+    .wide { grid-column: 1 / -1; }
+    iframe { width: 100%; min-height: 520px; border: 1px solid #ddd; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -32,6 +34,36 @@
         <button onclick="post('/api/alarm/on')">Alarm ON</button>
         <button onclick="post('/api/alarm/off')">Alarm OFF</button>
       </div>
+      <div class="row">
+        <input id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="PIN" />
+        <button onclick="submitPin()">Submit PIN</button>
+      </div>
+      <div id="pinMsg"></div>
+    </section>
+
+    <section class="card">
+      <h3>Alarm Controls / Scenarios</h3>
+      <div class="row">
+        <label><input id="ctrlDoor" type="checkbox" checked onchange="setAlarmControl('door_open_too_long', this.checked)" /> DS open > 5s</label>
+      </div>
+      <div class="row">
+        <label><input id="ctrlEntry" type="checkbox" checked onchange="setAlarmControl('entry_delay_alarm', this.checked)" /> Entry delay expired</label>
+      </div>
+      <div class="row">
+        <label><input id="ctrlMotion" type="checkbox" checked onchange="setAlarmControl('motion_empty_house', this.checked)" /> Motion while empty</label>
+      </div>
+      <div class="row">
+        <label><input id="ctrlGsg" type="checkbox" checked onchange="setAlarmControl('gsg_tilt', this.checked)" /> GSG tilt</label>
+      </div>
+      <div class="row">
+        <button onclick="triggerScenario('ds_open_too_long')">Trigger DS > 5s</button>
+        <button onclick="triggerScenario('entry_delay_expired')">Trigger Entry Delay</button>
+      </div>
+      <div class="row">
+        <button onclick="triggerScenario('motion_empty_house')">Trigger Motion Empty</button>
+        <button onclick="triggerScenario('gsg_tilt')">Trigger GSG Tilt</button>
+      </div>
+      <div id="scenarioMsg"></div>
     </section>
 
     <section class="card">
@@ -57,7 +89,7 @@
       <div class="row">
         <button onclick="setBrgb(true)">ON</button>
         <button onclick="setBrgb(false)">OFF</button>
-        <input id="brgbColor" type="text" value="#00ff88" />
+        <input id="brgbColor" type="color" value="#00ff88" />
         <button onclick="setBrgb(null)">Set Color</button>
       </div>
     </section>
@@ -71,6 +103,15 @@
       <img id="cameraImg" alt="camera" style="max-width:100%; border-radius:8px; margin-top:8px; display:none;" />
     </section>
 
+    <section class="card wide">
+      <h3>Grafana Dashboard</h3>
+      <iframe
+        src="http://localhost:3000/d/smarthome-kt2/smart-home-kt2?orgId=1&kiosk"
+        title="Grafana Smart Home Dashboard"
+        loading="lazy"
+      ></iframe>
+    </section>
+
     <section class="card">
       <h3>Raw State</h3>
       <pre id="raw">{}</pre>
@@ -78,6 +119,24 @@
   </div>
 
   <script>
+    let cameraBaseUrl = '';
+    let cameraRetryTimer = null;
+
+    function cameraUrlWithTs(url) {
+      const clean = (url || '').replace(/[?&]t=\d+/g, '');
+      const sep = clean.includes('?') ? '&' : '?';
+      return `${clean}${sep}t=${Date.now()}`;
+    }
+
+    function scheduleCameraRetry(delayMs = 1500) {
+      if (!cameraBaseUrl) return;
+      if (cameraRetryTimer) clearTimeout(cameraRetryTimer);
+      cameraRetryTimer = setTimeout(() => {
+        const img = document.getElementById('cameraImg');
+        img.src = cameraUrlWithTs(cameraBaseUrl);
+      }, delayMs);
+    }
+
     async function post(url, body) {
       await fetch(url, {
         method: 'POST',
@@ -108,18 +167,99 @@
       await post('/api/brgb', body);
     }
 
+    async function submitPin() {
+      const pinEl = document.getElementById('pinInput');
+      const pin = (pinEl.value || '').trim();
+      const msg = document.getElementById('pinMsg');
+      if (!pin) {
+        msg.textContent = 'Unesi PIN.';
+        return;
+      }
+      const res = await fetch('/api/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        msg.textContent = 'PIN poslat.';
+        pinEl.value = '';
+      } else {
+        msg.textContent = data.error || 'PIN greška.';
+      }
+      await refresh();
+    }
+
+    async function setAlarmControl(name, enabled) {
+      const res = await fetch('/api/alarm-controls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, enabled })
+      });
+      const data = await res.json();
+      const msg = document.getElementById('scenarioMsg');
+      msg.textContent = (res.ok && data.ok)
+        ? `Control updated: ${name}=${enabled}`
+        : (data.error || 'Control update failed');
+      await refresh();
+    }
+
+    async function triggerScenario(name) {
+      const res = await fetch('/api/scenario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      const msg = document.getElementById('scenarioMsg');
+      msg.textContent = (res.ok && data.ok)
+        ? `Scenario triggered: ${name}`
+        : (data.error || 'Scenario failed');
+      await refresh();
+    }
+
+    function syncAlarmControls(ctrl) {
+      if (!ctrl || typeof ctrl !== 'object') return;
+      const map = {
+        ctrlDoor: 'door_open_too_long',
+        ctrlEntry: 'entry_delay_alarm',
+        ctrlMotion: 'motion_empty_house',
+        ctrlGsg: 'gsg_tilt'
+      };
+      Object.entries(map).forEach(([elId, key]) => {
+        const el = document.getElementById(elId);
+        if (el && key in ctrl) el.checked = !!ctrl[key];
+      });
+    }
+
     async function refreshCamera() {
       const res = await fetch('/api/camera');
       const data = await res.json();
       const el = document.getElementById('cameraStatus');
-      if (data.url) {
-        el.innerHTML = `Camera URL: <a href="${data.url}" target="_blank">${data.url}</a>`;
-        const img = document.getElementById('cameraImg');
-        img.src = data.url;
+      const url = (data.url || '').trim() || 'http://localhost:8080/?action=stream';
+      const img = document.getElementById('cameraImg');
+
+      if (!img.dataset.bound) {
+        img.onload = () => {
+          el.innerHTML = `Camera URL: <a href="${cameraBaseUrl}" target="_blank">${cameraBaseUrl}</a> (live)`;
+        };
+        img.onerror = () => {
+          el.innerHTML = `Camera URL: <a href="${cameraBaseUrl}" target="_blank">${cameraBaseUrl}</a> (reconnecting...)`;
+          scheduleCameraRetry(1500);
+        };
+        img.dataset.bound = '1';
+      }
+
+      if (url) {
+        const changed = cameraBaseUrl !== url;
+        cameraBaseUrl = url;
+        el.innerHTML = `Camera URL: <a href="${url}" target="_blank">${url}</a>`;
+        if (changed || !img.src) {
+          img.src = cameraUrlWithTs(url);
+        }
         img.style.display = 'block';
       } else {
         el.textContent = 'Camera URL nije podešen (set WEBC_URL env).';
-        const img = document.getElementById('cameraImg');
         img.style.display = 'none';
       }
     }
@@ -148,6 +288,13 @@
         <div>LCD: <strong>${data.lcd_text || '-'}</strong></div>
         <div>Reasons: <strong>${(data.alarm_reasons || []).join(', ') || '-'}</strong></div>
       `;
+
+      const picker = document.getElementById('brgbColor');
+      if (picker && typeof data.brgb_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(data.brgb_color)) {
+        picker.value = data.brgb_color;
+      }
+
+      syncAlarmControls(data.alarm_controls);
 
       document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
     }

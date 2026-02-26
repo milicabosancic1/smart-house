@@ -16,7 +16,7 @@ INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "smart_home")
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "home/#")
-WEBC_URL = os.getenv("WEBC_URL", "")
+WEBC_URL = os.getenv("WEBC_URL", "http://localhost:8080/?action=stream")
 
 # Ensure templates folder is found
 app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
@@ -351,6 +351,59 @@ def api_alarm_off():
     system_state.deactivate_alarm()
     system_state.disarm_system()
     return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.post("/api/pin")
+def api_pin_submit():
+    data = request.get_json(force=True, silent=True) or {}
+    pin = str(data.get("pin", "")).strip()
+    if not pin:
+        return jsonify({"ok": False, "error": "pin is required", "state": system_state.snapshot()}), 400
+    system_state.check_pin(pin)
+    return jsonify({"ok": True, "state": system_state.snapshot()})
+
+
+@app.get("/api/alarm-controls")
+def api_alarm_controls_get():
+    snap = system_state.snapshot()
+    return jsonify({"ok": True, "controls": snap.get("alarm_controls", {})})
+
+
+@app.post("/api/alarm-controls")
+def api_alarm_controls_set():
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get("name")
+    enabled = data.get("enabled")
+
+    if name is None or enabled is None:
+        return jsonify({"ok": False, "error": "name and enabled are required"}), 400
+
+    ok = system_state.set_alarm_control(str(name), bool(enabled))
+    if not ok:
+        return jsonify({"ok": False, "error": "invalid control"}), 400
+
+    snap = system_state.snapshot()
+    return jsonify({"ok": True, "controls": snap.get("alarm_controls", {}), "alarm": snap.get("alarm_active")})
+
+
+@app.post("/api/scenario")
+def api_scenario():
+    data = request.get_json(force=True, silent=True) or {}
+    name = data.get("name")
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+
+    if not name:
+        return jsonify({"ok": False, "error": "name is required"}), 400
+
+    result = system_state.trigger_scenario(str(name), params)
+    status = 200 if result.get("ok") else 400
+    snap = system_state.snapshot()
+    result["state"] = {
+        "alarm": snap.get("alarm_active"),
+        "armed": snap.get("system_armed"),
+        "alarm_reasons": snap.get("alarm_reasons", []),
+    }
+    return jsonify(result), status
 
 
 @app.post("/api/timer/set")

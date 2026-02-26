@@ -14,6 +14,12 @@ class SystemState:
         self._alarm_reasons = set()
         self._alarm_events = []
         self._alarm_event_queue = []
+        self.alarm_controls = {
+            "door_open_too_long": True,
+            "entry_delay_alarm": True,
+            "motion_empty_house": True,
+            "gsg_tilt": True,
+        }
 
         # Broj osoba
         self.person_count = 0
@@ -95,6 +101,69 @@ class SystemState:
         with self.lock:
             self.system_armed = False
             self.pending_arm = False
+
+    def set_alarm_control(self, name: str, enabled: bool):
+        with self.lock:
+            if name not in self.alarm_controls:
+                return False
+
+            self.alarm_controls[name] = bool(enabled)
+            if enabled:
+                return True
+
+            if name == "door_open_too_long":
+                self._alarm_reasons = {r for r in self._alarm_reasons if not r.endswith("_open_too_long")}
+            elif name == "entry_delay_alarm":
+                self._alarm_reasons = {r for r in self._alarm_reasons if not r.endswith("_armed")}
+            elif name == "motion_empty_house":
+                self._alarm_reasons.discard("motion_empty_house")
+            elif name == "gsg_tilt":
+                self._alarm_reasons.discard("gsg_tilt")
+
+            if self.alarm_active and not self._alarm_reasons:
+                self.alarm_active = False
+                self._record_alarm_event("off", f"rule_disabled:{name}")
+            return True
+
+    def trigger_scenario(self, name: str, params: dict | None = None):
+        params = params or {}
+
+        if name == "ds_open_too_long":
+            sensor = str(params.get("sensor", "DS1")).upper()
+            if sensor not in self._door_open_since:
+                return {"ok": False, "error": "invalid sensor"}
+            with self.lock:
+                self._door_open_since[sensor] = time.time() - self.ds_timeout_sec - 0.2
+            self.check_time_rules()
+            return {"ok": True, "scenario": name, "sensor": sensor}
+
+        if name == "entry_delay_expired":
+            sensor = str(params.get("sensor", "DS1")).upper()
+            if sensor not in self._door_open_since:
+                return {"ok": False, "error": "invalid sensor"}
+            with self.lock:
+                self.system_armed = True
+                self.pending_arm = False
+                self._entry_delay_start = time.time() - self.entry_delay_sec - 0.2
+                self._entry_delay_active_for = sensor
+            self.check_time_rules()
+            return {"ok": True, "scenario": name, "sensor": sensor}
+
+        if name == "motion_empty_house":
+            sensor = str(params.get("sensor", "DPIR3")).upper()
+            if sensor not in self._last_motion_ts:
+                return {"ok": False, "error": "invalid sensor"}
+            with self.lock:
+                self.person_count = 0
+                self._last_motion_ts[sensor] = 0.0
+            self.handle_motion(sensor, True)
+            return {"ok": True, "scenario": name, "sensor": sensor}
+
+        if name == "gsg_tilt":
+            self.handle_gsg(self.gsg_alarm_threshold + 5.0)
+            return {"ok": True, "scenario": name}
+
+        return {"ok": False, "error": "unknown scenario"}
 
     # -------------------
     # ARMING SYSTEM
@@ -216,12 +285,13 @@ class SystemState:
             if self._entry_delay_start is not None:
                 if now - self._entry_delay_start >= self.entry_delay_sec:
                     sensor = self._entry_delay_active_for
-                    print(f"ENTRY DELAY EXPIRED ({sensor}): Activating alarm")
-                    self._alarm_reasons.add(f"{sensor}_armed")
-                    if not self.alarm_active:
-                        print("ALARM ACTIVATED")
-                        self.alarm_active = True
-                        self._record_alarm_event("on", f"{sensor}_armed")
+                    if self.alarm_controls.get("entry_delay_alarm", True):
+                        print(f"ENTRY DELAY EXPIRED ({sensor}): Activating alarm")
+                        self._alarm_reasons.add(f"{sensor}_armed")
+                        if not self.alarm_active:
+                            print("ALARM ACTIVATED")
+                            self.alarm_active = True
+                            self._record_alarm_event("on", f"{sensor}_armed")
                     self._entry_delay_start = None
                     self._entry_delay_active_for = None
             
@@ -230,7 +300,7 @@ class SystemState:
                 if open_since is None:
                     continue
 
-                if now - open_since >= self.ds_timeout_sec:
+                if now - open_since >= self.ds_timeout_sec and self.alarm_controls.get("door_open_too_long", True):
                     self._alarm_reasons.add(f"{sensor}_open_too_long")
                     if not self.alarm_active:
                         print("ALARM ACTIVATED")
@@ -252,6 +322,7 @@ class SystemState:
                 "entry_delay_active": self._entry_delay_start is not None,
                 "entry_delay_remaining": entry_delay_remaining,
                 "entry_delay_sensor": self._entry_delay_active_for,
+                "alarm_controls": dict(self.alarm_controls),
                 "person_count": self.person_count,
                 "alarm_reasons": sorted(self._alarm_reasons),
                 "alarm_events": list(self._alarm_events[-100:]),
@@ -323,7 +394,7 @@ class SystemState:
             self.person_left()
 
         with self.lock:
-            if self.person_count == 0:
+            if self.person_count == 0 and self.alarm_controls.get("motion_empty_house", True):
                 self._alarm_reasons.add("motion_empty_house")
                 if not self.alarm_active:
                     print("ALARM ACTIVATED")
@@ -338,7 +409,7 @@ class SystemState:
         except Exception:
             return
 
-        if movement >= self.gsg_alarm_threshold:
+        if movement >= self.gsg_alarm_threshold and self.alarm_controls.get("gsg_tilt", True):
             self.activate_alarm("gsg_tilt")
 
     def update_dht(self, sensor: str, value):
